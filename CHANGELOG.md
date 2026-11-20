@@ -5,6 +5,19 @@ All notable changes to pecron-monitor are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project uses [Semantic Versioning](https://semver.org/).
 
 
+## [0.9.0] - 2026-11-20
+
+Fork of upstream v0.8.4 (see README). Upstream history and credits are preserved.
+
+### Added
+- **Built-in web dashboard** (`--web`, optional `web:` config block). A standard-library-only HTTP server runs alongside the monitor and serves a live single-page UI: battery/voltage/power cards, AC/DC/UPS toggles, every writable TSL control, a log tail, raw JSON, and 1h/6h/24h/7d/30d history graphs. Bind with `--web-host` / `--web-port` (default `0.0.0.0:8090`).
+- **JSON API** for the dashboard: `GET /api/status`, `GET /api/controls`, `POST /api/control`, `GET /api/history`, `GET /api/logs`, `GET /api/raw`. Control writes reuse the existing `send_control()` path, so all read-only guards, local→cloud fallback, and read-back verification still apply.
+- **Prometheus exporter** (`GET /metrics`, no extra dependency) exposing 24 gauges (battery %, voltage, temperature, in/out power, net power, remaining/charge time, estimated time-to-empty/full, AC/DC/UPS switch, device online, data age, data source, capacity, monitor uptime). The dashboard's history graphs read from a local Prometheus when reachable (`web.prometheus_url`, default `http://127.0.0.1:9090`) and fall back to an in-process 24h buffer.
+
+### Changed
+- `Dockerfile` exposes port 8090 for the web UI.
+
+
 ## [0.8.4] - 2026-10-21
 
 ### Fixed

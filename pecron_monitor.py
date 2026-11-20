@@ -19,9 +19,10 @@ Usage:
                                             # Probe valid values starting at 0
     pecron-monitor --raw          # Dump raw JSON from device
     pecron-monitor --homeassistant # Start with Home Assistant MQTT bridge
+    pecron-monitor --web          # Start the built-in web dashboard (http://<host>:8090/)
 """
 
-__version__ = "0.8.4"
+__version__ = "0.9.0"
 
 import argparse
 import json
@@ -41,6 +42,29 @@ from setup_wizard import setup_wizard
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 log = logging.getLogger("pecron")
+
+
+def _import_web_ui():
+    """Import PecronWebUI, tolerating editable installs that don't map the module.
+
+    `web_ui.py` is a flat sibling of this file. Normal editable installs expose it
+    as a top-level module, but some install layouts (editable finders that only map
+    modules known at install time) don't. Fall back to loading it from this file's
+    directory so `--web` works regardless of how the package was installed.
+    """
+    try:
+        from web_ui import PecronWebUI
+
+        return PecronWebUI
+    except ModuleNotFoundError:
+        import importlib.util
+
+        path = Path(__file__).resolve().parent / "web_ui.py"
+        spec = importlib.util.spec_from_file_location("web_ui", path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["web_ui"] = module
+        spec.loader.exec_module(module)
+        return module.PecronWebUI
 
 
 def _describe_devices(devices: list) -> str:
@@ -103,6 +127,9 @@ def _main():
         action="store_true",
         help="Use REST API only (disable MQTT and local transports)",
     )
+    parser.add_argument("--web", action="store_true", help="Start the built-in web UI dashboard")
+    parser.add_argument("--web-host", metavar="HOST", help="Web UI bind address (default 0.0.0.0)")
+    parser.add_argument("--web-port", metavar="PORT", type=int, help="Web UI port (default 8090)")
     parser.add_argument("--status", action="store_true", help="One-shot status check")
     parser.add_argument("--ac", choices=["on", "off"], help="Turn AC output on/off")
     parser.add_argument("--dc", choices=["on", "off"], help="Turn DC output on/off")
@@ -480,6 +507,32 @@ def _main():
         print("\n✅ Diagnostics complete")
         return
 
+    web_cfg = config.get("web") or {}
+    web_enabled = args.web or bool(web_cfg.get("enabled", False))
+    one_shot = (
+        args.status
+        or args.ac
+        or args.dc
+        or args.control
+        or args.probe_control
+        or args.raw
+        or args.controls
+        or args.diagnose
+    )
+    if web_enabled and one_shot:
+        log.warning(
+            "--web only works with continuous monitoring; ignoring it for this one-shot command"
+        )
+
+    web = None
+    if web_enabled and not one_shot:
+        PecronWebUI = _import_web_ui()
+
+        host = args.web_host or web_cfg.get("host", "0.0.0.0")
+        port = args.web_port or int(web_cfg.get("port", 8090))
+        web = PecronWebUI(monitor, host=host, port=port)
+        web.start()
+
     if args.ac is not None or args.dc is not None:
         monitor.one_shot_command(
             ac=(args.ac == "on") if args.ac else None,
@@ -489,10 +542,15 @@ def _main():
     elif args.status:
         monitor.status_once(force_offline=args.local, skip_local=args.nolocal)
     else:
-        monitor.run(
-            enable_ha=args.homeassistant or config.get("homeassistant", {}).get("enabled", False),
-            force_offline=args.local,
-        )
+        try:
+            monitor.run(
+                enable_ha=args.homeassistant
+                or config.get("homeassistant", {}).get("enabled", False),
+                force_offline=args.local,
+            )
+        finally:
+            if web:
+                web.stop()
 
 
 if __name__ == "__main__":

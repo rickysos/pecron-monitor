@@ -11,6 +11,12 @@ services:
       - ./config.yaml:/config/config.yaml:ro
       - pecron-monitor-data:/data
     command: ["pecron-monitor", "--config", "/config/config.yaml"]
+    # To enable the web dashboard (http://<host>:8090/), append --web:
+    #   command: ["pecron-monitor", "--config", "/config/config.yaml", "--web"]
+    #   ports:
+    #     - "8090:8090"
+    # Or set web.enabled: true in config.yaml. The same container also serves
+    # the Prometheus exporter at http://<host>:8090/metrics.
 
 volumes:
   pecron-monitor-data:

@@ -1,6 +1,22 @@
 # Pecron Battery Monitor
 
-**v0.8.4** · [Changelog](CHANGELOG.md) · [Latest release](https://github.com/attractify-logan/pecron-monitor/releases/latest) · [Project board](https://github.com/users/attractify-logan/projects/1)
+**v0.9.0** · [Changelog](CHANGELOG.md) · [Latest release](https://github.com/attractify-logan/pecron-monitor/releases/latest) · [Project board](https://github.com/users/attractify-logan/projects/1)
+
+> ### 🍴 Fork — credit where it's due
+>
+> This repository is a fork of **[attractify-logan/pecron-monitor](https://github.com/attractify-logan/pecron-monitor)**
+> by attractify-logan (MIT). All original work belongs to the upstream project.
+> This fork adds, on top of upstream v0.8.4:
+>
+> - **Built-in web dashboard** (`--web`) — live battery/power view, AC/DC/UPS
+>   toggles, all writable controls, 1h–30d history graphs
+> - **Prometheus exporter** (`GET /metrics`) — 24 gauges for long-term
+>   storage and alerting, plus a dashboard that reads history back from
+>   Prometheus
+>
+> Issues about upstream behavior belong in the
+> [upstream tracker](https://github.com/attractify-logan/pecron-monitor/issues);
+> issues about the web UI / exporter belong here.
 
 Monitor and control Pecron portable power stations from the command line — no phone app required.
 
@@ -338,6 +354,84 @@ sensor:
 Then add the resulting output energy sensor under "Individual devices", or an
 input energy sensor under "Solar panels" / "Grid consumption" as appropriate.
 
+## Web UI & Prometheus Exporter
+
+Start the built-in web dashboard (standard library only, no extra dependencies):
+
+```bash
+pecron-monitor --web                    # http://<host>:8090/
+pecron-monitor --web --web-port 9000    # custom port
+```
+
+Or enable it in `config.yaml`:
+
+```yaml
+web:
+  enabled: true
+  host: 0.0.0.0
+  port: 8090
+```
+
+The dashboard shows live battery/voltage/power, AC/DC/UPS toggles, every writable
+control, a log tail, and 1h/6h/24h history graphs.
+
+### JSON API
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/status` | Live telemetry for all devices |
+| `GET /api/controls` | Writable controls + current values |
+| `POST /api/control` | `{"device_key", "code", "value"}` → send a control |
+| `GET /api/history?minutes=60` | Time-series samples for the graphs |
+| `GET /api/logs` | Recent log lines |
+| `GET /api/raw` | Raw device data |
+
+### Prometheus exporter
+
+`GET /metrics` exposes telemetry in the Prometheus text format (no extra
+dependency). Scrape it from `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: "pecron-monitor"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["localhost:8090"]
+```
+
+Exported gauges: `pecron_battery_percent`, `pecron_battery_voltage`,
+`pecron_battery_temperature_c`, `pecron_net_power_w` (positive = charging),
+`pecron_input_power_w`, `pecron_output_power_w`, `pecron_ac/dc_input_power_w`,
+`pecron_ac/dc_output_power_w`, `pecron_remaining_discharge/charge_minutes`,
+`pecron_est_time_to_empty/full_seconds`, `pecron_ac/dc/ups_switch`,
+`pecron_device_online`, `pecron_data_age_seconds`, `pecron_data_source`,
+`pecron_capacity_wh`, `pecron_monitor_uptime_seconds`.
+
+The dashboard's history graphs read from Prometheus when it is reachable
+(default `http://127.0.0.1:9090`, override with `web: {prometheus_url: ...}`
+in `config.yaml`), so the 7d/30d ranges reflect your stored data. If
+Prometheus is down, they fall back to the in-process 24h buffer.
+
+Set retention with `--storage.tsdb.retention.time` (e.g. `548d` for 18
+months) — with Homebrew that lives in `/opt/homebrew/etc/prometheus.args`.
+Expected size: ~30 MB/day for one device, so ~15 GB over 18 months.
+
+Useful long-term queries (Prometheus UI, http://localhost:9090):
+
+```promql
+# Wh charged/discharged in last 30d (positive = into the battery)
+integrate(pecron_net_power_w[30d]) / 3600
+
+# Lowest battery reached in last 90d
+min_over_time(pecron_battery_percent[90d])
+
+# Share of time the AC output was on (last 30d, %)
+avg_over_time(pecron_ac_switch[30d]) * 100
+
+# Average runtime estimate while discharging (last 7d, minutes)
+avg_over_time(pecron_remaining_discharge_minutes[7d])
+```
+
 ## Running as a Service
 
 The setup wizard (`--setup`) offers to install a systemd service automatically at the end — it detects your user and install path and handles everything.
@@ -446,4 +540,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE). This fork of
+[attractify-logan/pecron-monitor](https://github.com/attractify-logan/pecron-monitor)
+retains the upstream MIT license and copyright notice.

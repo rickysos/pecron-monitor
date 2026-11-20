@@ -13,4 +13,7 @@ RUN pip install --upgrade pip \
     && pip install ".[ble]" \
     && mkdir -p /config /data
 
+# Web dashboard (start the container with --web appended, or web.enabled in config.yaml)
+EXPOSE 8090
+
 CMD ["pecron-monitor", "--config", "/config/config.yaml"]
