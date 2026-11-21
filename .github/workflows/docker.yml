@@ -1,7 +1,7 @@
 name: Docker
 
 # Publishes the container to Docker Hub:
-#   - tag v* pushes  -> <user>/pecron-monitor:<version>  (e.g. v0.9.0 -> 0.9.0)
+#   - tag v* pushes  -> <user>/pecron-monitor:<tag>          (e.g. v0.9.0 -> v0.9.0)
 #   - pushes to main -> <user>/pecron-monitor:latest + <user>/pecron-monitor:sha-<short-sha>
 #
 # One-time repo setup (Settings -> Secrets and variables -> Actions):
@@ -39,7 +39,7 @@ jobs:
         with:
           images: ${{ vars.DOCKERHUB_USERNAME }}/pecron-monitor
           tags: |
-            type=ref,event=tag,pattern=v(?P<version>.*)
+            type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-
           labels: |
